@@ -5,6 +5,8 @@ import { RouterModule } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { ThemeService } from '../../../core/services/theme.service';
 import { Theme } from '../../../core/models/theme.model';
+import { AuthService } from '../../../core/services/auth.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-header',
@@ -15,24 +17,11 @@ import { Theme } from '../../../core/models/theme.model';
       <div class="container">
         <div class="header-content">
           <div class="brand">
-            <a routerLink="/" class="brand-link">
               <div class="logo">
                 <span class="logo-icon">🏢</span>
                 <span class="logo-text">ChatBot</span>
               </div>
-            </a>
           </div>
-          
-          <nav class="nav" [class.nav-open]="isNavOpen">
-            <a 
-              routerLink="/enterprise" 
-              routerLinkActive="active" 
-              class="nav-link"
-              (click)="closeNav()">
-              <span class="nav-icon">🏢</span>
-              Empresas
-            </a>
-          </nav>
           
           <div class="actions">
             <button 
@@ -51,6 +40,7 @@ import { Theme } from '../../../core/models/theme.model';
               [class.active]="isNavOpen">
               <span class="hamburger"></span>
             </button>
+            <button *ngIf="isAuthenticated()" class="btn btn-danger" (click)="logout()">Sair</button>
           </div>
         </div>
       </div>
@@ -305,7 +295,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
   isNavOpen = false;
   private destroy$ = new Subject<void>();
 
-  constructor(private themeService: ThemeService) {}
+  constructor(private themeService: ThemeService, private authService: AuthService, private router: Router) {}
 
   ngOnInit(): void {
     this.themeService.currentTheme$
@@ -365,5 +355,14 @@ export class HeaderComponent implements OnInit, OnDestroy {
     if (event.key === 'Escape' && this.isNavOpen) {
       this.closeNav();
     }
+  }
+
+  isAuthenticated(): boolean {
+    return this.authService.isAuthenticated();
+  }
+
+  logout(): void {
+    this.authService.logout();
+    this.router.navigate(['/login']);
   }
 }

@@ -11,3 +11,16 @@ export interface ApiError {
   details?: any;
 }
 
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  email: string;
+  name: string;
+  enterpriseId: string;
+  role: string;
+}
+

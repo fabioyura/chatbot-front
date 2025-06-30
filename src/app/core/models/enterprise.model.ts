@@ -18,6 +18,7 @@ export interface Enterprise {
   enterpriseName: string;
   qrCodeBase64: string;
   generatedAt: Date;
+  connected:  boolean;
 }
 
 export interface QrCodeBytesResponse {

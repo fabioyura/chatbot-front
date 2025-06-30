@@ -58,7 +58,7 @@ import { EnterpriseService } from '../../../core/services/enterprise.service';
               <div class="status-info">
                 <span class="status-badge">
                   <span class="status-dot"></span>
-                  Aguardando conexão
+                  {{statusText}}
                 </span>
                 <small class="last-updated">
                   Gerado em: {{ lastUpdated | date:'dd/MM/yyyy HH:mm:ss' }}
@@ -66,6 +66,37 @@ import { EnterpriseService } from '../../../core/services/enterprise.service';
               </div>
             </div>
           </div>
+
+          <!-- Connected State -->
+<div *ngIf="statusText === 'Conectado' && !qrCodeData" class="connected-state">
+  <div class="success-icon">✅</div>
+  <h4 class="success-title">WhatsApp Conectado!</h4>
+  <p class="success-message">
+    Sua instância do WhatsApp está conectada e funcionando.
+  </p>
+  
+  <div class="connection-info">
+    <div class="info-item">
+      <span class="info-label">Status:</span>
+      <span class="status-badge connected">
+        <span class="status-dot connected"></span>
+        Conectado
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Última verificação:</span>
+      <span class="info-value">{{ lastUpdated | date:'dd/MM/yyyy HH:mm:ss' }}</span>
+    </div>
+  </div>
+
+  <div class="connected-actions">
+    <button class="btn btn-secondary" (click)="refreshQrCode()">
+      <span *ngIf="isLoading" class="spinner-sm"></span>
+      <span *ngIf="!isLoading">🔄</span>
+      {{ isLoading ? 'Verificando...' : 'Verificar Status' }}
+    </button>
+  </div>
+</div>
 
           <!-- Error State -->
           <div *ngIf="errorMessage" class="error-state">
@@ -78,11 +109,11 @@ import { EnterpriseService } from '../../../core/services/enterprise.service';
           </div>
 
           <!-- Auto-refresh Info -->
-          <div *ngIf="qrCodeData && autoRefreshEnabled" class="auto-refresh-info">
-            <small>
-              🔄 Atualização automática em {{ autoRefreshCountdown }}s
-            </small>
-          </div>
+<div *ngIf="autoRefreshEnabled && (qrCodeData || statusText === 'Conectado')" class="auto-refresh-info">
+  <small>
+    🔄 {{ statusText === 'Conectado' ? 'Verificação' : 'Atualização' }} automática em {{ autoRefreshCountdown }}s
+  </small>
+</div>
         </div>
       </div>
     </div>
@@ -268,6 +299,104 @@ import { EnterpriseService } from '../../../core/services/enterprise.service';
         flex-direction: column;
         align-items: flex-start;
       }
+
+      .connected-state {
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.05));
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: var(--radius-lg);
+}
+
+.success-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  animation: bounce 0.6s ease-in-out;
+}
+
+.success-title {
+  color: var(--success-color, #16a34a);
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.success-message {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+.connection-info {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(34, 197, 94, 0.1);
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.info-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.info-value {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.status-badge.connected {
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--success-color, #16a34a);
+}
+
+.status-dot.connected {
+  background-color: var(--success-color, #16a34a);
+  animation: pulse-success 2s infinite;
+}
+
+.connected-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -10px, 0);
+  }
+  70% {
+    transform: translate3d(0, -5px, 0);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+@keyframes pulse-success {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  50% { 
+    opacity: 0.7;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
+  }
+}
     }
   `]
 })
@@ -275,6 +404,8 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
   @Input() enterpriseId: string = '';
   
   qrCodeData: string = '';
+  statusText: string = '';
+  statusClass: string = '';
   isLoading: boolean = false;
   errorMessage: string = '';
   lastUpdated: Date = new Date();
@@ -315,15 +446,24 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
         finalize(() => this.isLoading = false)
       )
       .subscribe({
-        next: (response) => {
-          if (response.qrCodeBase64) {
-            this.qrCodeData = response.qrCodeBase64;
-            this.lastUpdated = new Date();
-            this.errorMessage = '';
-          } else {
-            this.errorMessage = 'QR Code não disponível';
-          }
-        },
+  next: (response) => {
+    if (response.connected) {
+      this.errorMessage = '';
+      this.qrCodeData = '';
+      this.statusText = 'Conectado';
+      this.statusClass = 'connected';
+    }
+    else if (response.qrCodeBase64) {
+      this.errorMessage = '';
+      this.qrCodeData = response.qrCodeBase64;
+      this.lastUpdated = new Date();
+      this.statusText = 'Aguardando conexão';
+      this.statusClass = 'waiting';
+    }
+    else {
+      this.errorMessage = 'QR Code não disponível';
+    }
+  },
         error: (error) => {
           this.errorMessage = error.message || 'Erro ao carregar QR Code';
           this.qrCodeData = '';
@@ -346,28 +486,29 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
     // QR code carregado com sucesso
   }
 
-  private startAutoRefresh(): void {
-    if (!this.autoRefreshEnabled) return;
+private startAutoRefresh(): void {
+  if (!this.autoRefreshEnabled) return;
 
-    // Timer de countdown
-    interval(1000)
-      .pipe(takeUntil(this.autoRefreshTimer$))
-      .subscribe(() => {
-        this.autoRefreshCountdown--;
-        
-        if (this.autoRefreshCountdown <= 0) {
-          this.loadQrCode();
-          this.resetAutoRefreshTimer();
-        }
-      });
+  // Timer de countdown
+  interval(1000)
+    .pipe(takeUntil(this.autoRefreshTimer$))
+    .subscribe(() => {
+      this.autoRefreshCountdown--;
+      
+      if (this.autoRefreshCountdown <= 0) {
+        this.loadQrCode();
+        // Se conectado, usar intervalo maior para economizar recursos
+        const refreshInterval = this.statusText === 'Conectado' ? 60 : 30;
+        this.resetAutoRefreshTimer(refreshInterval);
+      }
+    });
+}
+private resetAutoRefreshTimer(interval: number = 30): void {
+  this.autoRefreshCountdown = interval;
+  this.autoRefreshTimer$.next();
+  
+  if (this.autoRefreshEnabled) {
+    this.startAutoRefresh();
   }
-
-  private resetAutoRefreshTimer(): void {
-    this.autoRefreshCountdown = 30;
-    this.autoRefreshTimer$.next();
-    
-    if (this.autoRefreshEnabled) {
-      this.startAutoRefresh();
-    }
-  }
+}
 }

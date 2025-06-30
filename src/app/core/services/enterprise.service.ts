@@ -4,7 +4,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
-import { CustomPromptResponse, QrCodeResponse, UpdatePromptRequest } from '../models/enterprise.model';
+import { CustomPromptResponse, QrCodeResponse, UpdatePromptRequest, Enterprise } from '../models/enterprise.model';
 
 @Injectable({
   providedIn: 'root'
@@ -35,6 +35,10 @@ export class EnterpriseService {
     `${this.baseUrl}/Enterprise/${enterpriseId}/qr-code`
   );  }
 
+  getEnterpriseById(enterpriseId: string): Observable<Enterprise> {
+    return this.http.get<Enterprise>(`${this.baseUrl}/Enterprise/${enterpriseId}`)
+      .pipe(catchError(this.handleError));
+  }
 
   private handleError(error: HttpErrorResponse): Observable<never> {
     let errorMessage = 'Ocorreu um erro desconhecido';

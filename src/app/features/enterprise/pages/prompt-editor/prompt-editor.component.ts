@@ -17,12 +17,10 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
     <div class="container">
       <div class="page-header">
         <div class="header-actions">
-          <a routerLink="/enterprise" class="btn btn-secondary">
-            ← Voltar
-          </a>
+        
         </div>
         <h1>Editor de Prompt</h1>
-        <p *ngIf="enterpriseId">Empresa: <code>{{ enterpriseId }}</code></p>
+        <p *ngIf="enterpriseName">Empresa: <code>{{ enterpriseName }}</code></p>
       </div>
 
       <div class="editor-layout">
@@ -248,6 +246,7 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
 })
 export class PromptEditorComponent implements OnInit, OnDestroy {
   enterpriseId: string = '';
+  enterpriseName: string = '';
   customPrompt: string = '';
   originalPrompt: string = '';
   isSubmitting: boolean = false;
@@ -265,12 +264,20 @@ export class PromptEditorComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.enterpriseId = this.route.snapshot.paramMap.get('id') || '';
-    
     if (!this.enterpriseId) {
       this.router.navigate(['/enterprise']);
       return;
     }
-
+    this.enterpriseService.getEnterpriseById(this.enterpriseId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (enterprise) => {
+          this.enterpriseName = enterprise.name || this.enterpriseId;
+        },
+        error: () => {
+          this.enterpriseName = this.enterpriseId;
+        }
+      });
     this.loadCustomPrompt();
   }
 
