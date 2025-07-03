@@ -5,6 +5,7 @@ import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { CustomPromptResponse, QrCodeResponse, UpdatePromptRequest, Enterprise } from '../models/enterprise.model';
+import { Conversation } from '../models/conversation.model';
 
 @Injectable({
   providedIn: 'root'
@@ -38,6 +39,27 @@ export class EnterpriseService {
   getEnterpriseById(enterpriseId: string): Observable<Enterprise> {
     return this.http.get<Enterprise>(`${this.baseUrl}/Enterprise/${enterpriseId}`)
       .pipe(catchError(this.handleError));
+  }
+
+  getConversationsByEnterpriseId(enterpriseId: string): Observable<Conversation[]> {
+    const url = `${this.baseUrl}/conversations/enterprise/${enterpriseId}`;
+    return this.http.get<Conversation[]>(url).pipe(
+      catchError(this.handleError)
+    );
+  }
+
+  getConversationById(conversationId: string, includeLead: boolean = true, includeHistory: boolean = false): Observable<Conversation> {
+    const url = `${this.baseUrl}/conversations/${conversationId}?includeLead=${includeLead}&includeHistory=${includeHistory}`;
+    return this.http.get<Conversation>(url).pipe(
+      catchError(this.handleError)
+    );
+  }
+
+  toggleConversationStatus(conversationId: string, enterpriseId: string): Observable<void> {
+    const url = `${this.baseUrl}/conversations/${conversationId}/enterprise/${enterpriseId}/toggle-conversation-status`;
+    return this.http.patch<void>(url, {}).pipe(
+      catchError(this.handleError)
+    );
   }
 
   private handleError(error: HttpErrorResponse): Observable<never> {

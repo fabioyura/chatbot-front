@@ -109,8 +109,8 @@ import { EnterpriseService } from '../../../core/services/enterprise.service';
           </div>
 
           <!-- Auto-refresh Info -->
-<div *ngIf="autoRefreshEnabled && (qrCodeData || statusText === 'Conectado')" class="auto-refresh-info">
-  <small>
+          <div *ngIf="autoRefreshEnabled && qrCodeData && statusText !== 'Conectado'" class="auto-refresh-info">
+          <small>
     🔄 {{ statusText === 'Conectado' ? 'Verificação' : 'Atualização' }} automática em {{ autoRefreshCountdown }}s
   </small>
 </div>
@@ -436,34 +436,42 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
       this.errorMessage = 'ID da empresa não fornecido';
       return;
     }
-
+  
     this.isLoading = true;
     this.errorMessage = '';
-
+  
     this.enterpriseService.getQrCode(this.enterpriseId)
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => this.isLoading = false)
       )
       .subscribe({
-  next: (response) => {
-    if (response.connected) {
-      this.errorMessage = '';
-      this.qrCodeData = '';
-      this.statusText = 'Conectado';
-      this.statusClass = 'connected';
-    }
-    else if (response.qrCodeBase64) {
-      this.errorMessage = '';
-      this.qrCodeData = response.qrCodeBase64;
-      this.lastUpdated = new Date();
-      this.statusText = 'Aguardando conexão';
-      this.statusClass = 'waiting';
-    }
-    else {
-      this.errorMessage = 'QR Code não disponível';
-    }
-  },
+        next: (response) => {
+          if (response.connected) {
+            this.errorMessage = '';
+            this.qrCodeData = '';
+            this.statusText = 'Conectado';
+            this.statusClass = 'connected';
+  
+            this.autoRefreshEnabled = false;
+            this.autoRefreshTimer$.next();
+          } 
+          else if (response.qrCodeBase64) {
+            this.errorMessage = '';
+            this.qrCodeData = response.qrCodeBase64;
+            this.lastUpdated = new Date();
+            this.statusText = 'Aguardando conexão';
+            this.statusClass = 'waiting';
+  
+            if (!this.autoRefreshEnabled) {
+              this.autoRefreshEnabled = true;
+              this.resetAutoRefreshTimer();
+            }
+          } 
+          else {
+            this.errorMessage = 'QR Code não disponível';
+          }
+        },
         error: (error) => {
           this.errorMessage = error.message || 'Erro ao carregar QR Code';
           this.qrCodeData = '';
@@ -471,6 +479,7 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
         }
       });
   }
+  
 
   refreshQrCode(): void {
     this.loadQrCode();
@@ -483,26 +492,24 @@ export class QrCodeDisplayComponent implements OnInit, OnDestroy {
   }
 
   onImageLoad(): void {
-    // QR code carregado com sucesso
   }
 
-private startAutoRefresh(): void {
-  if (!this.autoRefreshEnabled) return;
-
-  // Timer de countdown
-  interval(1000)
-    .pipe(takeUntil(this.autoRefreshTimer$))
-    .subscribe(() => {
-      this.autoRefreshCountdown--;
-      
-      if (this.autoRefreshCountdown <= 0) {
-        this.loadQrCode();
-        // Se conectado, usar intervalo maior para economizar recursos
-        const refreshInterval = this.statusText === 'Conectado' ? 60 : 30;
-        this.resetAutoRefreshTimer(refreshInterval);
-      }
-    });
-}
+  private startAutoRefresh(): void {
+    if (!this.autoRefreshEnabled) return;
+  
+    interval(1000)
+      .pipe(takeUntil(this.autoRefreshTimer$))
+      .subscribe(() => {
+        this.autoRefreshCountdown--;
+  
+        if (this.autoRefreshCountdown <= 0) {
+          this.loadQrCode(); 
+  
+          this.autoRefreshTimer$.next(); 
+        }
+      });
+  }
+  
 private resetAutoRefreshTimer(interval: number = 30): void {
   this.autoRefreshCountdown = interval;
   this.autoRefreshTimer$.next();

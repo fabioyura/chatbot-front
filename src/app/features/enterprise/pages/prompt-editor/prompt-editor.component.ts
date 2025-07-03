@@ -7,25 +7,36 @@ import { Subject, takeUntil, finalize } from 'rxjs';
 import { EnterpriseService } from '../../../../core/services/enterprise.service';
 import { LoadingService } from '../../../../core/services/loading.service';
 import { UpdatePromptRequest } from '../../../../core/models/enterprise.model';
+import { Conversation } from '../../../../core/models/conversation.model';
 import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-display/qr-code-display.component';
+import { ConversationDetailModalComponent } from '../../components/conversation-detail-modal/conversation-detail-modal.component';
 
 @Component({
   selector: 'app-prompt-editor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, QrCodeDisplayComponent],
+  imports: [CommonModule, FormsModule, RouterModule, QrCodeDisplayComponent, ConversationDetailModalComponent],
   template: `
     <div class="container">
+      <!-- Conversation Detail Modal -->
+      <app-conversation-detail-modal
+        *ngIf="isConversationModalOpen"
+        [isOpen]="isConversationModalOpen"
+        [conversationId]="selectedConversationId"
+        [enterpriseId]="enterpriseId"
+        (closeModal)="closeConversationModal()">
+      </app-conversation-detail-modal>
       <div class="page-header">
         <div class="header-actions">
         
         </div>
-        <h1>Editor de Prompt</h1>
+        <h1>Painel da Empresa</h1>
         <p *ngIf="enterpriseName">Empresa: <code>{{ enterpriseName }}</code></p>
       </div>
 
-      <div class="editor-layout">
-        <!-- Left Column - Prompt Editor -->
-        <div class="editor-container">
+      <div class="main-layout">
+        <!-- Left Column - Prompt Editor & Conversations -->
+        <div class="left-column">
+          <!-- Prompt Editor -->
           <div class="card">
             <div class="card-header">
               <h2 class="card-title">Prompt Personalizado</h2>
@@ -41,7 +52,7 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
                     name="customPrompt"
                     [(ngModel)]="customPrompt"
                     class="form-control"
-                    rows="10"
+                    rows="8"
                     placeholder="Digite o prompt personalizado para esta empresa..."
                     required>
                   </textarea>
@@ -68,12 +79,110 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
           </div>
 
           <!-- Status Messages -->
-          <div class="status-messages">
+          <div class="status-messages" *ngIf="successMessage || errorMessage">
             <div class="alert alert-success" *ngIf="successMessage">
               {{ successMessage }}
             </div>
             <div class="alert alert-error" *ngIf="errorMessage">
               {{ errorMessage }}
+            </div>
+          </div>
+
+          <!-- Conversations Section -->
+          <div class="card conversations-card">
+            <div class="card-header">
+              <h2 class="card-title">Conversas</h2>
+              <button 
+                class="btn btn-outline"
+                (click)="toggleConversations()"
+                [disabled]="isLoadingConversations">
+                <span *ngIf="isLoadingConversations" class="spinner-sm"></span>
+                {{ showConversations ? 'Ocultar' : 'Ver Conversas' }}
+              </button>
+            </div>
+            
+            <div class="card-body" *ngIf="showConversations">
+              <!-- Loading State -->
+              <div *ngIf="isLoadingConversations" class="loading-state">
+                <div class="spinner"></div>
+                <p>Carregando conversas...</p>
+              </div>
+
+              <!-- Empty State -->
+              <div *ngIf="!isLoadingConversations && conversations.length === 0" class="empty-state">
+                <div class="empty-icon">💬</div>
+                <h3>Nenhuma conversa encontrada</h3>
+                <p>Quando os clientes começarem a conversar, elas aparecerão aqui.</p>
+              </div>
+
+              <!-- Conversations List -->
+              <div *ngIf="!isLoadingConversations && conversations.length > 0" class="conversations-list">
+                <div 
+                  *ngFor="let conversation of conversations; trackBy: trackByConversationId"
+                  class="conversation-item"
+                  (click)="viewConversationDetails(conversation.id)">
+                  
+                  <div class="conversation-header">
+                    <div class="user-info">
+                      <div class="user-avatar">
+                        {{ getUserInitials(conversation.userName) }}
+                      </div>
+                      <div class="user-details">
+                        <h4 class="user-name">{{ conversation.userName || 'Usuário Anônimo' }}</h4>
+                        <p class="user-phone">{{ formatPhone(conversation.userPhone) }}</p>
+                      </div>
+                    </div>
+                    
+                    <div class="conversation-meta">
+                      <div class="status-badges">
+                        <span 
+                          class="status-badge"
+                          [class.active]="conversation.isActive"
+                          [class.inactive]="!conversation.isActive">
+                          {{ conversation.isActive ? 'Ativa' : 'Finalizada' }}
+                        </span>
+                        <span *ngIf="conversation.leadQualification" 
+                              class="lead-badge"
+                              [attr.data-status]="getLeadStatusText(conversation.leadQualification.status)">
+                          {{ getLeadStatusText(conversation.leadQualification.status) }}
+                        </span>
+                      </div>
+                      <div class="conversation-stats">
+                        <span class="message-count">{{ conversation.messageCount }} mensagens</span>
+                        <span class="last-interaction">{{ formatDate(conversation.lastInteractionAt) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="conversation-preview" *ngIf="conversation.leadQualification?.analysisSummary">
+                    <p class="analysis-summary">{{ conversation.leadQualification?.analysisSummary }}</p>
+                    
+                    <div class="lead-tags" *ngIf="conversation.leadQualification?.tags?.length">
+                      <span 
+                        *ngFor="let tag of conversation.leadQualification?.tags?.slice(0, 3)" 
+                        class="tag">
+                        {{ tag.value }}
+                      </span>
+                      <span *ngIf="(conversation.leadQualification?.tags?.length || 0) > 3" class="tag-more">
+                        +{{ (conversation.leadQualification?.tags?.length || 0) - 3 }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="conversation-actions">
+                    <button class="btn-action" (click)="viewConversationDetails(conversation.id); $event.stopPropagation()">
+                      Ver Detalhes
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Load More (Future Enhancement) -->
+              <div *ngIf="conversations.length > 0" class="load-more-section">
+                <button class="btn btn-outline load-more-btn" disabled>
+                  Carregando mais conversas em breve...
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -130,15 +239,18 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
       color: var(--text-primary);
     }
 
-    .editor-layout {
+    .main-layout {
       display: grid;
       grid-template-columns: 1fr 400px;
       gap: 2rem;
       align-items: start;
     }
 
-    .editor-container {
-      max-width: 800px;
+    .left-column {
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
     }
 
     .qr-sidebar {
@@ -148,7 +260,7 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
 
     .form-control {
       resize: vertical;
-      min-height: 200px;
+      min-height: 180px;
       font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
       line-height: 1.5;
     }
@@ -180,6 +292,223 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
       background-color: rgba(239, 68, 68, 0.1);
       color: var(--error-color);
       border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    /* Conversations Styles */
+    .conversations-card .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .loading-state, .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .empty-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .empty-state h3 {
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    .conversations-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .conversation-item {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background-color: var(--background-secondary);
+    }
+
+    .conversation-item:hover {
+      border-color: var(--primary-color);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .conversation-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+
+    .user-details h4 {
+      margin: 0 0 0.25rem 0;
+      color: var(--text-primary);
+      font-size: 1.1rem;
+    }
+
+    .user-details p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .conversation-meta {
+      text-align: right;
+    }
+
+    .status-badges {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      justify-content: flex-end;
+    }
+
+    .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status-badge.active {
+      background-color: rgba(16, 185, 129, 0.2);
+      color: var(--success-color);
+    }
+
+    .status-badge.inactive {
+      background-color: rgba(107, 114, 128, 0.2);
+      color: var(--text-secondary);
+    }
+
+    .lead-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .lead-badge[data-status="baixo"] {
+      background-color: rgba(239, 68, 68, 0.2);
+      color: var(--error-color);
+    }
+
+    .lead-badge[data-status="médio"] {
+      background-color: rgba(245, 158, 11, 0.2);
+      color: #d97706;
+    }
+
+    .lead-badge[data-status="alto"] {
+      background-color: rgba(16, 185, 129, 0.2);
+      color: var(--success-color);
+    }
+
+    .conversation-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .conversation-preview {
+      margin-bottom: 1rem;
+    }
+
+    .analysis-summary {
+      margin: 0 0 1rem 0;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    .lead-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .tag {
+      padding: 0.25rem 0.75rem;
+      background-color: var(--background-tertiary);
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .tag-more {
+      padding: 0.25rem 0.75rem;
+      background-color: var(--primary-color);
+      color: white;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+    }
+
+    .conversation-actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .btn-action {
+      padding: 0.5rem 1rem;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-action:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .load-more-section {
+      text-align: center;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .load-more-btn {
+      width: 100%;
+    }
+
+    .spinner-sm {
+      width: 16px;
+      height: 16px;
+      border: 2px solid transparent;
+      border-top: 2px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      margin-right: 0.5rem;
     }
 
     .tips-card {
@@ -218,7 +547,7 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
 
     /* Responsive */
     @media (max-width: 1024px) {
-      .editor-layout {
+      .main-layout {
         grid-template-columns: 1fr;
         gap: 1.5rem;
       }
@@ -238,9 +567,38 @@ import { QrCodeDisplayComponent } from '../../../../shared/components/qr-code-di
         width: 100%;
       }
 
-      .editor-layout {
+      .main-layout {
         gap: 1rem;
       }
+
+      .conversation-header {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .conversation-meta {
+        text-align: left;
+        width: 100%;
+      }
+
+      .status-badges {
+        justify-content: flex-start;
+      }
+
+      .conversations-card .card-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+      }
+
+      .conversations-card .card-header .btn {
+        width: 100%;
+      }
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
   `]
 })
@@ -252,6 +610,15 @@ export class PromptEditorComponent implements OnInit, OnDestroy {
   isSubmitting: boolean = false;
   successMessage: string = '';
   errorMessage: string = '';
+
+  // Conversations
+  conversations: Conversation[] = [];
+  showConversations: boolean = false;
+  isLoadingConversations: boolean = false;
+
+  // Modal de Detalhes da Conversa
+  isConversationModalOpen: boolean = false;
+  selectedConversationId: string = '';
 
   private destroy$ = new Subject<void>();
 
@@ -268,6 +635,7 @@ export class PromptEditorComponent implements OnInit, OnDestroy {
       this.router.navigate(['/enterprise']);
       return;
     }
+    
     this.enterpriseService.getEnterpriseById(this.enterpriseId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -278,6 +646,7 @@ export class PromptEditorComponent implements OnInit, OnDestroy {
           this.enterpriseName = this.enterpriseId;
         }
       });
+    
     this.loadCustomPrompt();
   }
 
@@ -305,6 +674,110 @@ export class PromptEditorComponent implements OnInit, OnDestroy {
           console.error('Erro ao carregar prompt:', error);
         }
       });
+  }
+
+  toggleConversations(): void {
+    this.showConversations = !this.showConversations;
+    
+    if (this.showConversations && this.conversations.length === 0) {
+      this.loadConversations();
+    }
+  }
+
+  private loadConversations(): void {
+    this.isLoadingConversations = true;
+    
+    this.enterpriseService.getConversationsByEnterpriseId(this.enterpriseId)
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => this.isLoadingConversations = false)
+      )
+      .subscribe({
+        next: (conversations) => {
+          this.conversations = conversations;
+        },
+        error: (error) => {
+          console.error('Erro ao carregar conversas:', error);
+          this.errorMessage = 'Erro ao carregar conversas';
+        }
+      });
+  }
+
+  viewConversationDetails(conversationId: string): void {
+    this.selectedConversationId = conversationId;
+    this.isConversationModalOpen = true;
+  }
+
+  closeConversationModal(): void {
+    this.isConversationModalOpen = false;
+    this.selectedConversationId = '';
+  }
+
+  trackByConversationId(index: number, conversation: Conversation): string {
+    return conversation.id;
+  }
+
+  getUserInitials(userName: string): string {
+    if (!userName) return 'U';
+    
+    const names = userName.trim().split(' ');
+    if (names.length === 1) {
+      return names[0].substring(0, 2).toUpperCase();
+    }
+    
+    return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+  }
+
+  formatPhone(phone: string): string {
+    if (!phone) return 'Telefone não informado';
+    
+    // Remove all non-numeric characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Brazilian phone format
+    if (cleaned.length === 13 && cleaned.startsWith('55')) {
+      // +55 11 99999-9999
+      return `+55 ${cleaned.substring(2, 4)} ${cleaned.substring(4, 9)}-${cleaned.substring(9)}`;
+    } else if (cleaned.length === 11) {
+      // 11 99999-9999
+      return `${cleaned.substring(0, 2)} ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
+    }
+    
+    return phone;
+  }
+
+  formatDate(dateString: string): string {
+    if (!dateString) return 'Data não disponível';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) {
+      return 'Agora há pouco';
+    } else if (diffInHours < 24) {
+      return `${diffInHours}h atrás`;
+    } else if (diffInHours < 48) {
+      return 'Ontem';
+    } else {
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+  }
+
+  getLeadStatusText(status: number): string {
+    const statusMap: { [key: number]: string } = {
+      1: 'baixo',
+      2: 'baixo', 
+      3: 'médio',
+      4: 'alto',
+      5: 'alto'
+    };
+    
+    return statusMap[status] || 'desconhecido';
   }
 
   onSave(): void {
